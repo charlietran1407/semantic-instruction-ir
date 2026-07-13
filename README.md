@@ -1,138 +1,119 @@
-# Semantic IR DSL: Semantic Memory Representation for LLM
+# Semantic Instruction IR (SIR)
 
-## 1. Tổng quan
+## A Compact Semantic Representation for LLM Instruction Memory
 
-Semantic IR DSL là một kỹ thuật biểu diễn thông tin dạng nén dành cho LLM, nhằm chuyển đổi nội dung ngôn ngữ tự nhiên dài thành cấu trúc ngữ nghĩa nhỏ gọn để lưu trữ và tái sử dụng.
+---
 
-Mục tiêu không phải là thay thế ngôn ngữ tự nhiên, mà là lưu lại phần thông tin cần thiết để LLM có thể tái tạo ý định, hành động và bối cảnh khi cần.
+# 1. Overview
 
-Luồng hoạt động:
+**Semantic Instruction IR (SIR)** là một định dạng biểu diễn trung gian (Intermediate Representation) dùng để chuyển đổi chỉ dẫn bằng ngôn ngữ tự nhiên thành cấu trúc ngữ nghĩa nhỏ gọn dành cho LLM.
 
+SIR không nhằm thay thế ngôn ngữ tự nhiên hoặc tạo ra một ngôn ngữ lập trình mới.
+
+Mục tiêu của SIR là:
+
+* loại bỏ phần diễn đạt dư thừa.
+* giữ lại ý định và thông tin ảnh hưởng đến hành động.
+* lưu trữ instruction dưới dạng có cấu trúc.
+* cung cấp lại context cho LLM khi cần.
+
+---
+
+# 2. Problem
+
+Instruction dành cho LLM hiện thường được lưu dưới dạng văn bản:
+
+```text
+Before modifying code, analyze architecture.
+After changes, run build verification.
+Do not report completion without successful build.
 ```
-Natural Language
+
+Nhược điểm:
+
+* nhiều từ mô tả.
+* lặp lại ý nghĩa.
+* tốn context window.
+* khó truy xuất phần quan trọng.
+
+SIR chuyển đổi thành:
+
+```text
+@Inst
+
+Int:CodeModification
+
+Act:
+- rd:Architecture
+- upd:Code
+- run:Build
+
+Cons:
++BuildSuccess
+-ReportWithoutValidation
+```
+
+LLM vẫn giữ được ý định nhưng giảm lượng thông tin dư thừa.
+
+---
+
+# 3. Core Concept
+
+SIR hoạt động như một lớp trung gian:
+
+```text
+Human Instruction
         |
         v
-Semantic Compression
+Semantic Extraction
         |
         v
-Semantic IR DSL
+Semantic Instruction IR
         |
         v
-Semantic Memory Storage
+SIR Memory
 (md / DB / Knowledge Repository)
         |
         v
-Retrieve Context
+LLM Context Retrieval
         |
         v
-LLM Reasoning / Execution
+Agent Execution
 ```
 
 ---
 
-# 2. Vấn đề
+# 4. Design Principle
 
-Hiện nay, thông tin dành cho LLM thường được lưu dưới dạng:
+## 4.1 Minimal Specification
 
-* tài liệu dài
-* ghi chú
-* changelog
-* prompt
-* lịch sử hội thoại
+Chỉ lưu những thành phần cần thiết để tái tạo ý nghĩa.
 
-Các dạng này có nhiều thông tin không cần thiết:
+Bao gồm:
 
-* câu chữ mô tả
-* phần giải thích lặp lại
-* ngữ cảnh hiển nhiên
-* cách diễn đạt của con người
-
-Ví dụ:
-
-```
-ArcadeDbService trước đây sử dụng field injection.
-Điều này làm dependency bị ẩn và gây khó khăn khi viết unit test.
-Đã chuyển sang constructor injection và cập nhật test.
-```
-
-Phần quan trọng đối với LLM chỉ là:
-
-```
-Component:
-ArcadeDbService
-
-Issue:
-FieldInjection
-->
-HiddenDependency
-->
-TestComplexity
-
-Action:
-ConstructorInjection
-Remove:ReflectionTestUtils
-```
-
----
-
-# 3. Mục tiêu kỹ thuật
-
-Semantic IR DSL nhằm:
-
-* Giảm kích thước context lưu trữ.
-* Tăng mật độ thông tin.
-* Giữ lại ý nghĩa thay vì câu chữ.
-* Cho phép LLM sử dụng lại kiến thức trong quá khứ.
-* Giảm việc gửi lại các mô tả dài.
-
-Các thông tin cần bảo toàn:
-
-```
-Entity
-Identifier
+```text
 Intent
+Entity
 Action
 Parameter
 Constraint
-Causal Relationship
+Causal Relation
 ```
 
-Các thông tin có thể loại bỏ:
+Không lưu:
 
-```
+```text
 Filler words
-Repeated explanation
+Repeated explanations
 Formatting
 Obvious knowledge
 ```
 
 ---
 
-# 4. Nguyên tắc thiết kế
-
-## 4.1 Minimal Specification
-
-Chỉ lưu thông tin ảnh hưởng đến việc hiểu hoặc hành động.
-
-Không lưu:
-
-```
-upd means update
-```
-
-vì LLM đã hiểu.
-
-Chỉ lưu:
-
-```
-upd:Parser
-```
-
----
-
 ## 4.2 Maximal Semantic Leverage
 
-Tận dụng kiến thức có sẵn của LLM.
+SIR tận dụng khả năng suy luận có sẵn của LLM.
 
 Không mã hóa lại kiến thức phổ biến.
 
@@ -140,24 +121,24 @@ Ví dụ:
 
 Không cần:
 
-```
-Constructor injection is a dependency injection technique
+```text
+Constructor Injection is a dependency injection pattern.
 ```
 
 Chỉ cần:
 
-```
+```text
 ref:Service
-change:constructor_injection
+change:ConstructorInjection
 ```
 
 ---
 
-# 5. Cấu trúc Semantic IR DSL
+# 5. SIR Structure
 
-Semantic IR DSL sử dụng các block chính:
+SIR gồm các block chính:
 
-```
+```text
 @Inst
 @Meta
 @Chg
@@ -165,20 +146,20 @@ Semantic IR DSL sử dụng các block chính:
 
 ---
 
-# 6. @Inst - Instruction Memory
+# 6. @Inst - Instruction Representation
 
-`@Inst` lưu các quy tắc hoặc hành vi của agent.
+`@Inst` lưu instruction có tính hành vi.
 
 Dùng cho:
 
-* workspace rules
-* coding rules
-* agent behavior
-* workflow
+* agent rules.
+* workflow.
+* coding conventions.
+* operational instructions.
 
 Cấu trúc:
 
-```
+```text
 @Inst
 
 Int:[Intent]
@@ -199,10 +180,12 @@ Cons:
 
 Ví dụ:
 
-```
+```text
 @Inst
 
 Int:JavaDevelopment
+
+Role:DeveloperAgent
 
 Act:
 - rd:ArchitectureContext
@@ -216,20 +199,20 @@ Cons:
 
 ---
 
-# 7. @Chg - Change Memory
+# 7. @Chg - Change Representation
 
-`@Chg` lưu các thay đổi đã xảy ra.
+`@Chg` lưu các thay đổi kỹ thuật, quyết định hoặc lịch sử xử lý.
 
 Dùng cho:
 
-* changelog
-* quyết định kỹ thuật
-* lịch sử sửa lỗi
-* kiến trúc hệ thống
+* changelog.
+* architecture decision.
+* bug resolution.
+* optimization history.
 
 Cấu trúc:
 
-```
+```text
 @Meta
 
 date:YYYY-MM-DD
@@ -251,7 +234,7 @@ Act:
 
 Ví dụ:
 
-```
+```text
 @Meta
 
 date:2026-07-09
@@ -275,192 +258,191 @@ Act:
 
 ---
 
-# 8. Semantic Operator
+# 8. Semantic Operation
 
-Các operator phổ biến:
+Các action verb phổ biến:
 
-| Operator | Ý nghĩa       |
-| -------- | ------------- |
-| rd       | đọc           |
-| cr       | tạo           |
-| mk       | tạo/thực hiện |
-| upd      | cập nhật      |
-| add      | thêm          |
-| rm       | xóa           |
-| ref      | tái cấu trúc  |
-| set      | thiết lập     |
-| tune     | điều chỉnh    |
-| inj      | inject        |
-| defer    | trì hoãn      |
+| Verb  | Meaning  |
+| ----- | -------- |
+| rd    | read     |
+| cr    | create   |
+| mk    | make     |
+| upd   | update   |
+| add   | add      |
+| rm    | remove   |
+| ref   | refactor |
+| set   | set      |
+| tune  | tune     |
+| inj   | inject   |
+| defer | defer    |
 
 ---
 
-# 9. Quan hệ ngữ nghĩa
+# 9. Semantic Relation
 
-Toán tử:
+SIR sử dụng:
 
-```
+```text
 ->
 ```
 
-biểu diễn quan hệ:
+để biểu diễn:
 
-* nguyên nhân → kết quả
-* điều kiện → hành động
-* phụ thuộc → ảnh hưởng
+* nguyên nhân → kết quả.
+* điều kiện → hành động.
+* phụ thuộc → ảnh hưởng.
 
 Ví dụ:
 
-```
+```text
 MissingContext
 ->
-WrongModification
+WrongImplementation
 ->
 BuildFailure
 ```
 
-LLM không được tự tạo thêm nguyên nhân không có trong dữ liệu.
+Quy tắc:
+
+* Không tự thêm nguyên nhân.
+* Không suy diễn ngoài dữ liệu được cung cấp.
 
 ---
 
-# 10. Constraint
+# 10. Constraint Representation
 
 Constraint mô tả giới hạn hành vi.
 
 Bắt buộc:
 
-```
+```text
 +
 ```
 
 Ví dụ:
 
-```
+```text
 +RunTest
 ```
 
-Không được:
+Cấm:
 
-```
+```text
 -
 ```
 
 Ví dụ:
 
-```
+```text
 -ReportWithoutValidation
 ```
 
 ---
 
-# 11. Cách sử dụng
+# 11. Storage Model
 
-Semantic IR DSL được lưu như memory:
+SIR có thể lưu trong:
+
+```text
+.md
+.json
+.database
+.vector memory
+.knowledge repository
+```
 
 Ví dụ:
 
-```
-knowledge/
- ├── architecture/
- ├── decisions/
- ├── changes/
- └── instructions/
+```text
+sir-memory/
+
+├── instructions/
+│     └── coding.inst
+
+├── changes/
+│     └── graph-layout.chg
+
+└── decisions/
+      └── architecture.dec
 ```
 
-Khi cần xử lý task:
+---
 
-```
+# 12. Retrieval Model
+
+Khi cần sử dụng:
+
+```text
 Task
  |
  v
-Retrieve related Semantic IR
+Search SIR Memory
  |
  v
-Inject into LLM context
+Retrieve Relevant SIR
  |
  v
-Generate response/action
+Inject Into LLM Context
+ |
+ v
+Generate Action
 ```
+
+LLM không cần đọc lại toàn bộ lịch sử.
+
+Chỉ cần semantic representation liên quan.
 
 ---
 
-# 12. So sánh với lưu trữ truyền thống
+# 13. Difference From Prompt
 
-## Văn bản truyền thống
+Prompt truyền thống:
 
-```
-10 trang tài liệu
-```
-
-Ưu:
-
-* dễ đọc
-
-Nhược:
-
-* nhiều thông tin thừa
-* tốn context
-
-## Semantic IR DSL
-
-```
-50 dòng semantic graph
+```text
+Remember these rules:
+Always check architecture before coding...
 ```
 
-Ưu:
+SIR:
 
-* nhỏ hơn
-* tập trung vào quyết định
-* LLM dễ tái sử dụng
+```text
+@Inst
+
+Act:
+- rd:Architecture
+- upd:Code
+
+Cons:
++Validation
+```
+
+Khác biệt:
+
+| Prompt                 | SIR                      |
+| ---------------------- | ------------------------ |
+| Câu chữ                | Cấu trúc nghĩa           |
+| Dành cho con người đọc | Dành cho LLM tái sử dụng |
+| Nhiều mô tả            | Tập trung hành động      |
+| Context dài            | Context nén              |
 
 ---
 
-# 13. Bản chất kỹ thuật
+# 14. Technical Definition
 
-Semantic IR DSL không phải:
-
-* ngôn ngữ lập trình.
-* schema bắt buộc.
-* hệ thống rule engine.
-
-Nó là:
-
-> Một định dạng biểu diễn bộ nhớ ngữ nghĩa tối giản, giúp LLM lưu trữ và tái sử dụng thông tin bằng cách giữ lại các thành phần có giá trị hành vi.
+**Semantic Instruction IR (SIR)** là một phương pháp biểu diễn trung gian nhằm nén instruction bằng cách chuyển đổi ngôn ngữ tự nhiên thành cấu trúc semantic gồm Intent, Entity, Action, Parameter, Constraint và Causal Relation, cho phép LLM lưu trữ, truy xuất và thực thi lại ý định với lượng context nhỏ hơn.
 
 ---
 
-# 14. Định hướng mở rộng
+# 15. Fundamental Principle
 
-Có thể mở rộng:
-
-```
-@Fact
-```
-
-cho kiến thức ổn định.
-
-```
-@Decision
-```
-
-cho quyết định kiến trúc.
-
-```
-@Task
-```
-
-cho workflow.
-
-Nhưng nguyên tắc giữ nguyên:
-
-```
+```text
 Minimal Specification
 +
 Maximal Semantic Leverage
+=
+Semantic Instruction IR
 ```
 
----
+SIR không lưu toàn bộ những gì con người đã nói.
 
-**Tóm tắt một câu:**
-
-Semantic IR DSL là cách nén ngôn ngữ tự nhiên thành "ký ức có cấu trúc" cho LLM, giữ lại ý định, hành động, ràng buộc và quan hệ nguyên nhân để AI có thể tái sử dụng mà không cần lưu toàn bộ văn bản gốc.
+SIR lưu phần cần thiết để LLM hiểu lại điều con người muốn đạt được.
