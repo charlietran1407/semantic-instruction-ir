@@ -1,0 +1,48 @@
+@Meta date:2026-07-14
+
+@Chg:AsyncDBSetup [scope:quado-desktop]
+Ctx: UI startup freeze → blocking operations → move to background threads → responsive UI
+Act:
+- upd:DashboardController.pathFieldListener [logic:CompletableFuture.runAsync() for project switch]
+- upd:ArcadeDbService.initializeProjectDatabase [logic:runAsync background]
+- upd:ArcadeDbService.refreshStats [logic:runAsync background]
+- upd:MainController.notifyPathChanged [logic:Platform.runLater()]
+- rm:duplicateDBInitCalls
+
+@Chg:SchemaCacheVerification [scope:ArcadeDbService]
+Ctx: repeated CREATE PROPERTY/INDEX queries on startup → parser overhead → in-memory cache first
+Act:
+- upd:ArcadeDbService.schemaCheck [logic:memory cache (existsProperty, getPolymorphicIndexByProperties)]
+- cr:SQLCommand [cond:property or index missing]
+- result: 0 schema setup queries on subsequent startups
+
+@Chg:LazyStrategyIndexers [scope:CodeIndexerService]
+Ctx: eager @Component loading all indexers → >200MB Metaspace + GC pressure → lazy load on demand
+Act:
+- rm:@Component [target:JavaIndexer|GoIndexer|PythonIndexer|TypeScriptIndexer|VueIndexer|DelphiIndexer|SqlIndexer]
+- cr:indexerRegistry [target:CodeIndexerService, logic:thread-safe Supplier<Indexer>]
+- defer:loadIndexer [cond:first file with matching extension]
+- effect: unused language parsers not loaded
+
+@Chg:AccurateFQNCallGraph [scope:JavaIndexer]
+Ctx: short method name CALLS edges → false positives (getName, run...) → FQN + import resolution
+Act:
+- cr:MethodVertex [logic:FQN pattern = packageName.ClassName.methodSignature]
+- upd:receiverResolution [logic:local var types + imports → fullClassName]
+- upd:CALLSEdgeCreation [cond:receiver type resolvable]
+- rm:fallbackNameOnlyMatching
+- note: other languages accept unresolved receiver (no edge)
+
+@Chg:GraphViewerFilter [scope:GraphController]
+Ctx: Function→Function edges → visual clutter in Graph Viewer
+Act:
+- upd:CypherQueries [target:loadGraphVisualization|search|expandNode, logic:AND NOT (a:Function AND b:Function)]
+- result: only Type→Function and Type↔Type dependencies shown
+
+@Chg:RelativePathStorage [scope:AllIndexers]
+Ctx: absolute file paths in DB → break on project move → store relative to project root
+Act:
+- upd:filepathStorage [logic:SourceCodeIndexer.toRelativePathStr(file, projectRoot)]
+- upd:hashKeys [target:currentHashes|previousHashes, logic:relative path]
+- defer:absolutePathResolution [target:SummaryEngineImpl|AiAnalysisService, logic:graphDbService.resolveToAbsolutePath()]
+- effect: project copy/move without re-indexing
