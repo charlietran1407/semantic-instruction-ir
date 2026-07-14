@@ -568,17 +568,19 @@ Các phần narrative không ảnh hưởng reasoning sẽ được loại bỏ.
 
 Không.
 
-ADR và SIR phục vụ hai mục tiêu khác nhau.
+ADR và SIR phục vụ các mục tiêu khác nhau.
 
 ADR tập trung vào:
-
 - ghi nhận quyết định kiến trúc
+- lưu trữ rationale, trade-offs và lifecycle của quyết định
 
 SIR tập trung vào:
+- nén semantic information
+- bảo toàn causal relationships, decisions, constraints và actions
+- tối ưu cho retrieval và reasoning của LLM
 
-- bảo toàn semantic cho con người và AI
-
-SIR có thể biểu diễn thông tin ADR dưới dạng phù hợp hơn cho LLM.
+SIR không thay thế ADR.
+Một ADR, cũng như README, design document, changelog hoặc technical report, có thể được chuyển đổi sang SIR để lưu trữ và xử lý hiệu quả hơn bởi LLM.
 
 ---
 
