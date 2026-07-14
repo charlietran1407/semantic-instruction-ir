@@ -1,448 +1,82 @@
 # Semantic Instruction IR (SIR)
 
-## A Compact Semantic Representation for LLM Instruction Memory
+SIR (Semantic Instruction IR) là định dạng nén ngữ nghĩa được thiết kế để lưu trữ và truyền tải **quyết định triển khai** một cách hiệu quả, giúp LLM có thể tái tạo lại reasoning một cách chính xác.
+
+## Mục tiêu thiết kế
+
+SIR ưu tiên ba nguyên tắc theo thứ tự:
+
+1. **KEY INFORMATION (100%)** — Giữ lại toàn bộ hành động, thay đổi, causal chain, ràng buộc và công việc hoãn lại.
+2. **SEMANTIC ACCURACY (≥96%)** — Giữ tên entity, thuật ngữ kỹ thuật và ý định gần với nguồn gốc nhất có thể.
+3. **COMPRESSION (≥40%)** — Loại bỏ văn xuôi, giọng bị động, tối đa hóa mật độ thông tin.
 
 ---
 
-# 1. Overview
+## Instruction SIR (Phiên bản cuối cùng)
 
-**Semantic Instruction IR (SIR)** là một định dạng biểu diễn trung gian (Intermediate Representation) dùng để chuyển đổi chỉ dẫn bằng ngôn ngữ tự nhiên thành cấu trúc ngữ nghĩa nhỏ gọn dành cho LLM.
+```markdown
+You are an expert at transforming natural language into Semantic Instruction IR (SIR) for LLMs.
 
-SIR không nhằm thay thế ngôn ngữ tự nhiên hoặc tạo ra một ngôn ngữ lập trình mới.
+**SIR encodes implementation semantics, enabling reasoning reconstruction.**
 
-Mục tiêu của SIR là:
+Convert source text into SIR with priority order:
 
-* loại bỏ phần diễn đạt dư thừa.
-* giữ lại ý định và thông tin ảnh hưởng đến hành động.
-* lưu trữ instruction dưới dạng có cấu trúc.
-* cung cấp lại context cho LLM khi cần.
+1. **KEY INFORMATION (100%)** — Preserve all actions, state transitions, causal chains, constraints, parameters, and deferred tasks.
+2. **SEMANTIC ACCURACY (≥96%)** — Use entity names and verbs matching the source.
+3. **COMPRESSION (≥40%)** — Maximize density, remove prose and passive voice.
 
----
+## RULES
+- Every `Act:` and `defer:` MUST have at least one corresponding `Ctx:` chain mentioning the target entity.
+- Every `Ctx:` chain MUST justify at least one `Act:` or `defer:` item.
+- "Replace X with Y" → `rm:X` + `cr/upd:Y`.
+- "Remove X" → `rm:X` (never encode as `why:`).
+- Split unrelated concerns into separate `@Chg` blocks.
+- Never hallucinate or add metadata not present in the source.
+- Preserve every concrete value exactly (numbers, constants, thresholds...).
 
-# 2. Problem
+## NOTATION
+```markdown
+@Meta date:[YYYY-MM-DD]
+@Chg:[DescriptiveName] [scope:module]
 
-Instruction dành cho LLM hiện thường được lưu dưới dạng văn bản:
-
-```text
-Before modifying code, analyze architecture.
-After changes, run build verification.
-Do not report completion without successful build.
-```
-
-Nhược điểm:
-
-* nhiều từ mô tả.
-* lặp lại ý nghĩa.
-* tốn context window.
-* khó truy xuất phần quan trọng.
-
-SIR chuyển đổi thành:
-
-```text
-@Inst
-
-Int:CodeModification
+Ctx: cause -> effect (-> outcome)
 
 Act:
-- rd:Architecture
-- upd:Code
-- run:Build
+- verb:target [logic:..., param:..., cond:..., type:..., why:...]
 
-Cons:
-+BuildSuccess
--ReportWithoutValidation
-```
+defer:
+- task [cond:...]
 
-LLM vẫn giữ được ý định nhưng giảm lượng thông tin dư thừa.
-
----
-
-# 3. Core Concept
-
-SIR hoạt động như một lớp trung gian:
-
-```text
-Human Instruction
-        |
-        v
-Semantic Extraction
-        |
-        v
-Semantic Instruction IR
-        |
-        v
-SIR Memory
-(md / DB / Knowledge Repository)
-        |
-        v
-LLM Context Retrieval
-        |
-        v
-Agent Execution
+Cons: (only if explicitly stated in the source)
+- wrong [pitfall:...]
++ must [why:...]
 ```
 
 ---
 
-# 4. Design Principle
+## SIR phù hợp với loại document nào?
 
-## 4.1 Minimal Specification
+SIR đặc biệt hiệu quả với các loại tài liệu sau:
 
-Chỉ lưu những thành phần cần thiết để tái tạo ý nghĩa.
+- **Changelog & Release Notes**
+- **Architecture Decision Records (ADR)**
+- **Technical Guidelines / Implementation Guidelines**
+- **Code Refactoring Summaries**
+- **Meeting Notes về kỹ thuật**
+- **Migration & Optimization Documents**
+- **Knowledge Base entries** (đặc biệt cho Knowledge OS (Quado project))
+- **Pull Request Descriptions** (technical part)
 
-Bao gồm:
-
-```text
-Intent
-Entity
-Action
-Parameter
-Constraint
-Causal Relation
-```
-
-Không lưu:
-
-```text
-Filler words
-Repeated explanations
-Formatting
-Obvious knowledge
-```
+**Không khuyến khích** dùng SIR cho:
+- Tài liệu hướng dẫn người dùng (User Guide)
+- Tài liệu marketing hoặc mô tả sản phẩm
+- Narrative writing / Story-telling
+- Legal documents
 
 ---
 
-## 4.2 Maximal Semantic Leverage
+## Triết lý cốt lõi
 
-SIR tận dụng khả năng suy luận có sẵn của LLM.
+> **SIR encodes implementation semantics, enabling reasoning reconstruction.**
 
-Không mã hóa lại kiến thức phổ biến.
-
-Ví dụ:
-
-Không cần:
-
-```text
-Constructor Injection is a dependency injection pattern.
-```
-
-Chỉ cần:
-
-```text
-ref:Service
-change:ConstructorInjection
-```
-
----
-
-# 5. SIR Structure
-
-SIR gồm các block chính:
-
-```text
-@Inst
-@Meta
-@Chg
-```
-
----
-
-# 6. @Inst - Instruction Representation
-
-`@Inst` lưu instruction có tính hành vi.
-
-Dùng cho:
-
-* agent rules.
-* workflow.
-* coding conventions.
-* operational instructions.
-
-Cấu trúc:
-
-```text
-@Inst
-
-Int:[Intent]
-
-Trig:[Trigger]
-
-Role:[Role]
-
-Cap:[Capability]
-
-Act:
-- action:target
-
-Cons:
-+required
--forbidden
-```
-
-Ví dụ:
-
-```text
-@Inst
-
-Int:JavaDevelopment
-
-Role:DeveloperAgent
-
-Act:
-- rd:ArchitectureContext
-- upd:SourceCode
-- run:Build
-
-Cons:
-+BuildSuccess
--ReportWithoutValidation
-```
-
----
-
-# 7. @Chg - Change Representation
-
-`@Chg` lưu các thay đổi kỹ thuật, quyết định hoặc lịch sử xử lý.
-
-Dùng cho:
-
-* changelog.
-* architecture decision.
-* bug resolution.
-* optimization history.
-
-Cấu trúc:
-
-```text
-@Meta
-
-date:YYYY-MM-DD
-
-
-@Chg:Name
-
-Ctx:
-cause
-->
-effect
-->
-problem
-
-
-Act:
-- verb:target
-```
-
-Ví dụ:
-
-```text
-@Meta
-
-date:2026-07-09
-
-
-@Chg:GraphOptimization
-
-Ctx:
-LinearCanvasScaling
-->
-GravityIncrease
-->
-NodeJitter
-
-
-Act:
-- upd:prefSize[Math.sqrt(nodeCount)]
-- tune:gravity[0.1]
-- defer:applyDefaultStyle
-```
-
----
-
-# 8. Semantic Operation
-
-Các action verb phổ biến:
-
-| Verb  | Meaning  |
-| ----- | -------- |
-| rd    | read     |
-| cr    | create   |
-| mk    | make     |
-| upd   | update   |
-| add   | add      |
-| rm    | remove   |
-| ref   | refactor |
-| set   | set      |
-| tune  | tune     |
-| inj   | inject   |
-| defer | defer    |
-
----
-
-# 9. Semantic Relation
-
-SIR sử dụng:
-
-```text
-->
-```
-
-để biểu diễn:
-
-* nguyên nhân → kết quả.
-* điều kiện → hành động.
-* phụ thuộc → ảnh hưởng.
-
-Ví dụ:
-
-```text
-MissingContext
-->
-WrongImplementation
-->
-BuildFailure
-```
-
-Quy tắc:
-
-* Không tự thêm nguyên nhân.
-* Không suy diễn ngoài dữ liệu được cung cấp.
-
----
-
-# 10. Constraint Representation
-
-Constraint mô tả giới hạn hành vi.
-
-Bắt buộc:
-
-```text
-+
-```
-
-Ví dụ:
-
-```text
-+RunTest
-```
-
-Cấm:
-
-```text
--
-```
-
-Ví dụ:
-
-```text
--ReportWithoutValidation
-```
-
----
-
-# 11. Storage Model
-
-SIR có thể lưu trong:
-
-```text
-.md
-.json
-.database
-.vector memory
-.knowledge repository
-```
-
-Ví dụ:
-
-```text
-sir-memory/
-
-├── instructions/
-│     └── coding.inst
-
-├── changes/
-│     └── graph-layout.chg
-
-└── decisions/
-      └── architecture.dec
-```
-
----
-
-# 12. Retrieval Model
-
-Khi cần sử dụng:
-
-```text
-Task
- |
- v
-Search SIR Memory
- |
- v
-Retrieve Relevant SIR
- |
- v
-Inject Into LLM Context
- |
- v
-Generate Action
-```
-
-LLM không cần đọc lại toàn bộ lịch sử.
-
-Chỉ cần semantic representation liên quan.
-
----
-
-# 13. Difference From Prompt
-
-Prompt truyền thống:
-
-```text
-Remember these rules:
-Always check architecture before coding...
-```
-
-SIR:
-
-```text
-@Inst
-
-Act:
-- rd:Architecture
-- upd:Code
-
-Cons:
-+Validation
-```
-
-Khác biệt:
-
-| Prompt                 | SIR                      |
-| ---------------------- | ------------------------ |
-| Câu chữ                | Cấu trúc nghĩa           |
-| Dành cho con người đọc | Dành cho LLM tái sử dụng |
-| Nhiều mô tả            | Tập trung hành động      |
-| Context dài            | Context nén              |
-
----
-
-# 14. Technical Definition
-
-**Semantic Instruction IR (SIR)** là một phương pháp biểu diễn trung gian nhằm nén instruction bằng cách chuyển đổi ngôn ngữ tự nhiên thành cấu trúc semantic gồm Intent, Entity, Action, Parameter, Constraint và Causal Relation, cho phép LLM lưu trữ, truy xuất và thực thi lại ý định với lượng context nhỏ hơn.
-
----
-
-# 15. Fundamental Principle
-
-```text
-Minimal Specification
-+
-Maximal Semantic Leverage
-=
-Semantic Instruction IR
-```
-
-SIR không lưu toàn bộ những gì con người đã nói.
-
-SIR lưu phần cần thiết để LLM hiểu lại điều con người muốn đạt được.
+SIR không phải là tóm tắt văn bản, cũng không phải tài liệu mô tả. Nó là **biểu diễn ngữ nghĩa triển khai** dưới dạng có thể tái tạo reasoning, giúp LLM hoặc lập trình viên sau này dễ dàng tiếp nối và hiểu rõ quyết định đã đưa ra.
